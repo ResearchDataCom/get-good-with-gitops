@@ -25,7 +25,7 @@ scripts to continuously validate their production environments.
 
 ## Prerequisites
 
-You will need [a GitHub account](https://github.com/join).
+You will need [a GitHub account](https://github.com/signup).
 
 You will need
 [administrator access](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html#jf_administrator)
@@ -53,3 +53,68 @@ required) to know
 
 You should know [how to use Git](https://gitimmersion.com/)
 (init/add/commit) with GitHub (clone/push/pull).
+
+## Tooling
+
+Package managers aren't necessarily required, but they make installing
+everything easier.
+
+- Windows: [Chocolatey](https://chocolatey.org/),
+  [WinGet](https://github.com/microsoft/winget-cli)
+
+- macOS: [Hombrew](https://brew.sh/),
+  [MacPorts](https://www.macports.org/)
+
+  These require the Command Line Tools for Xcode, available from
+  [the Apple Developer web site](https://developer.apple.com/download/all/),
+  or Xcode, available from
+  [the Mac App Store](https://itunes.apple.com/us/app/xcode/id497799835).
+
+- Linux: Use the built-in package manager, e.g. APT on Debian/Ubuntu.
+
+You will need to
+[install and configure the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html).
+While not ideal,
+[an IAM user with long-term credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-user.html)
+is easiest to set up.  Whatever you do, make sure the credentials you
+use have
+[administrator access](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html#jf_administrator).
+
+Install [Git](https://git-scm.com/downloads) if you haven't already.
+
+Install [the GitHub CLI](https://cli.github.com/) and log into your
+account with the command `gh auth login`.  You can use the GitHub CLI
+as [a Git credential helper](https://git-scm.com/docs/gitcredentials)
+if you choose HTTPS as your preferred protocol for Git operations.
+Complete the credential helper setup by running the command `gh auth
+setup-git`.  Refer to GitHub's
+[Authentication documentation](https://docs.github.com/en/authentication)
+for more information.
+
+This workshop specifically uses Python 3.12, the second most recent
+Python release at the time this was written.  For further
+instructions, refer to
+[Relieving Your Python Packaging Pain](https://www.bitecode.dev/p/relieving-your-python-packaging-pain).
+
+This workshop also uses
+[OpenTofu](https://opentofu.org/docs/intro/install/), a
+free/libre/open source software fork of Terraform.
+
+While any OCI-compliant container runtime should work, this workshop
+is designed around [Docker Desktop](https://www.docker.com/) (on
+Windows and macOS) or
+[Docker Engine](https://docs.docker.com/engine/install/) (on Linux).
+
+Install [act](https://nektosact.com/installation/), which uses Docker
+to simulate a GitHub Actions runner.  Download the included
+[.actrc](.actrc) file and save it to your Windows user profile (e.g.,
+`C:\Users\matthew`) or your macOS/Linux home directory (e.g.,
+`/Users/matthew` or `/home/matthew`).
+
+Download the `ubuntu-latest` container image ahead of the workshop by
+running the command `docker pull --platform linux/amd64
+ghcr.io/catthehacker/ubuntu:act-latest`.
+
+Finally, install your favorite code editor.
+[VSCodium](https://vscodium.com/) is a community-driven,
+freely-licensed binary distribution of Microsoft Visual Studio Code.
