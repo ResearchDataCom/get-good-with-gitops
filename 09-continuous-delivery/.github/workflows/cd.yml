@@ -25,6 +25,7 @@ jobs:
           role-to-assume: ${{ secrets.IAM_ROLE_TO_ASSUME || null }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || null }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || null }}
+          mask-aws-account-id: true
           role-skip-session-tagging: true
 
       # Initialize OpenTofu and deploy the stack.
