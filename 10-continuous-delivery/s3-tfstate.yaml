@@ -1,0 +1,324 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: >-
+  Create an S3 bucket for OpenTofu state storage, a DynamoDB table for
+  state locking, and an IAM policy that permits limited access to both
+  (e.g., from GitHub Actions).  For more information, see "Backend
+  Type: s3" in the OpenTofu documentation
+  (https://opentofu.org/docs/language/settings/backends/s3/).
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterLabels:
+      BillingMode:
+        default: DynamoDB Billing Mode
+      DynamoDBEncryptionKeyArn:
+        default: KMS Master Key ARN for DynamoDB Server-side Encryption
+      DynamoDBServerSideEncryption:
+        default: DynamoDB Server-side Encryption
+      ReadCapacityUnits:
+        default: DynamoDB Read Capacity Units
+      S3EncryptionKeyArn:
+        default: KMS Master Key ARN for S3 Server-side Encryption
+      S3ServerSideEncryption:
+        default: S3 Server-side Encryption
+      TableClass:
+        default: DynamoDB Table Class
+      TFStateKey:
+        default: OpenTofu State Key
+      WriteCapacityUnits:
+        default: DynamoDB Write Capacity Units
+
+    ParameterGroups:
+      - Label:
+          default: S3 Bucket
+        Parameters:
+          - S3ServerSideEncryption
+          - S3EncryptionKeyArn
+      - Label:
+          default: DynamoDB Table
+        Parameters:
+          - TableClass
+          - BillingMode
+          - ReadCapacityUnits
+          - WriteCapacityUnits
+          - DynamoDBServerSideEncryption
+          - DynamoDBEncryptionKeyArn
+      - Label:
+          default: IAM Policy
+        Parameters:
+          - TFStateKey
+
+
+Parameters:
+  BillingMode:
+    Type: String
+    Default: PAY_PER_REQUEST
+    Description: >-
+      Specify how you are charged for read and write throughput and
+      how you manage capacity.  Use PROVISIONED for predictable
+      workloads and PAY_PER_REQUEST for unpredictable workloads.
+    AllowedValues:
+      - PAY_PER_REQUEST
+      - PROVISIONED
+  DynamoDBEncryptionKeyArn:
+    Type: String
+    Default: ''
+    Description: >-
+      (Optional; KMS only) The stack will use this symmetric KMS
+      master key to encrypt the DynamoDB table instead of the default.
+  DynamoDBServerSideEncryption:
+    Type: String
+    Default: Built-in
+    Description: >-
+      The stack will encrypt DynamoDB table with a key of this type.
+      KMS costs more but enables key usage auditing and offers better
+      control over key management.
+    AllowedValues:
+      - Built-in
+      - KMS
+  ReadCapacityUnits:
+    Type: Number
+    Default: 1
+    Description: >-
+      (Optional; PROVISIONED billing only) Specify the maximum number
+      of strongly consistent reads consumed per second before DynamoDB
+      returns a ThrottlingException.  For more information, see
+      Specifying Read and Write Requirements in the Amazon DynamoDB
+      Developer Guide
+      (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ProvisionedThroughput.html).
+    MinValue: 1
+    ConstraintDescription: >-
+      This has a minimum value of 1.
+  S3EncryptionKeyArn:
+    Type: String
+    Default: ''
+    Description: >-
+      (Optional; SSE-KMS only) The stack will use this symmetric KMS
+      master key to encrypt the S3 storage instead of the default.
+  S3ServerSideEncryption:
+    Type: String
+    Default: SSE-S3
+    Description: >-
+      The stack will encrypt S3-backed storage with a key of this
+      type.  SSE-KMS costs more but enables key usage auditing and
+      offers better control over key management.
+    AllowedValues:
+      - SSE-S3
+      - SSE-KMS
+  TableClass:
+    Type: String
+    Default: STANDARD_INFREQUENT_ACCESS
+    Description: >-
+      The STANDARD_INFREQUENT_ACCESS table class offers lower storage
+      costs (good for long-term storage of historical data like
+      application logs), while the STANDARD table class offers lower
+      throughput costs (most cost-effective option for the vast
+      majority of workloads).
+    AllowedValues:
+      - STANDARD
+      - STANDARD_INFREQUENT_ACCESS
+  TFStateKey:
+    Type: String
+    Default: "*"
+    Description: >-
+      Specify where OpenTofu state may be stored the state storage
+      bucket.  Wildcards may be used.  The resulting managed IAM
+      policy may be used to grant CI/CD workflows access to the
+      OpenTofu S3 storage back end created by this stack.  Note that a
+      tailored IAM policy should be used for production workflows'
+      access to the OpenTofu back end following the priciple of least
+      access.
+    AllowedPattern: |-
+      \A(([A-Za-z0-9\*_\.-]+/)*([A-Za-z0-9\*_\.-]+))?\Z
+    MaxLength: 100
+    ConstraintDescription: >-
+      This must conform to S3 object key name and IAM wildcard match
+      restrictions.
+  WriteCapacityUnits:
+    Type: Number
+    Default: 1
+    Description: >-
+      (Optional; PROVISIONED billing only) Specify the maximum number
+      of writes consumed per second before DynamoDB returns a
+      ThrottlingException.  For more information, see Specifying Read
+      and Write Requirements in the Amazon DynamoDB Developer Guide
+      (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ProvisionedThroughput.html).
+    MinValue: 1
+    ConstraintDescription: >-
+      This has a minimum value of 1.
+
+
+Conditions:
+  WithPayPerRequest:
+    Fn::Equals:
+      - PAY_PER_REQUEST
+      - Ref: BillingMode
+  WithDefaultDynamoDBEncryption:
+    Fn::Equals:
+      - Built-in
+      - Ref: DynamoDBServerSideEncryption
+  WithDefaultDynamoDBEncryptionKey:
+    Fn::Equals:
+      - ""
+      - Ref: DynamoDBEncryptionKeyArn
+  WithDefaultS3Encryption:
+    Fn::Equals:
+      - SSE-S3
+      - Ref: S3ServerSideEncryption
+  WithDefaultS3EncryptionKey:
+    Fn::Equals:
+      - ""
+      - Ref: S3EncryptionKeyArn
+
+
+Resources:
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-s3-bucket.html
+  StateStorageBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm:
+                Fn::If:
+                  - WithDefaultS3Encryption
+                  - AES256
+                  - aws:kms
+              KMSMasterKeyID:
+                Fn::If:
+                  - WithDefaultS3Encryption
+                  - Ref: AWS::NoValue
+                  - Fn::If:
+                      - WithDefaultS3EncryptionKey
+                      - Fn::Sub: arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/s3
+                      - Ref: S3EncryptionKeyArn
+      VersioningConfiguration:
+        Status: Enabled
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dynamodb-table.html
+  StateLockingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: LockID
+          AttributeType: S
+      BillingMode:
+        Ref: BillingMode
+      KeySchema:
+        - AttributeName: LockID
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      ProvisionedThroughput:
+        Fn::If:
+          - WithPayPerRequest
+          - Ref: AWS::NoValue
+          - ReadCapacityUnits:
+              Ref: ReadCapacityUnits
+            WriteCapacityUnits:
+              Ref: WriteCapacityUnits
+      SSESpecification:
+        Fn::If:
+          - WithDefaultDynamoDBEncryption
+          - Ref: AWS::NoValue
+          - SSEEnabled: True
+            SSEType: KMS
+            KMSMasterKeyId:
+              Fn::If:
+                - WithDefaultDynamoDBEncryptionKey
+                - Fn::Sub: arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/dynamodb
+                - Ref: DynamoDBEncryptionKeyArn
+      TableClass:
+        Ref: TableClass
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy.html
+  StateAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: >-
+        Grants access to AWS resources used by the OpenTofu S3 storage
+        back end.
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: GrantStorageBucketAccess
+            Effect: Allow
+            Action: s3:ListBucket
+            Resource:
+              Fn::GetAtt: StateStorageBucket.Arn
+          - Sid: GrantStorageBucketKeyAccess
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              Fn::Sub: ${StateStorageBucket.Arn}/${TFStateKey}
+          - Sid: GrantStateLockingTableAccess
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:DeleteItem
+            Resource:
+              Fn::GetAtt: StateLockingTable.Arn
+          - Fn::If:
+              - WithDefaultDynamoDBEncryption
+              - Ref: AWS::NoValue
+              - Sid: AllowDynamoDBKmsKeyUsage
+                Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  Fn::If:
+                    - WithDefaultDynamoDBEncryptionKey
+                    - Fn::Sub: arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/dynamodb
+                    - Ref: DynamoDBEncryptionKeyArn
+          - Fn::If:
+              - WithDefaultS3Encryption
+              - Ref: AWS::NoValue
+              - Sid: AllowS3KmsKeyUsage
+                Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  Fn::If:
+                    - WithDefaultS3EncryptionKey
+                    - Fn::Sub: arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/s3
+                    - Ref: S3EncryptionKeyArn
+
+
+Outputs:
+  ExampleStateAccessPolicy:
+    Description: >-
+      An example managed IAM policy that grants access to the
+      resources created by this stack.  Assign this policy to roles
+      used by OpenTofu.  Note that tailored access controls should be
+      used in production environment.
+    Value:
+      Ref: StateAccessPolicy
+
+  StateLockingTable:
+    Description: >-
+      The DynamoDB table used for OpenTofu state locking and
+      consistency checking.
+    Value:
+      Ref: StateLockingTable
+
+  StateStorageBucket:
+    Description: >-
+      The S3 bucket used to store OpenTofu deployment state.
+    Value:
+      Ref: StateStorageBucket
