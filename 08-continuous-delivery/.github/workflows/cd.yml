@@ -25,7 +25,7 @@ jobs:
       - id: plan
         run: tofu plan -out terraform.tfplan -detailed-exitcode -no-color
         env:
-          TF_VAR_STACK_NAME: my-scoreboard
+          TF_VAR_STACK_NAME: simple-scoreboard
           TF_VAR_TAGS_ALL: |
             {"Environment": "Development", "Service": "Scorekeeping"}
       - if: steps.plan.outputs.exitcode == 2
