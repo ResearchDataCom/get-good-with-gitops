@@ -1,0 +1,189 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: >-
+  Grant GitHub Actions workflows access to AWS via the GitHub OIDC
+  provider.  For more information, see "Configuring OpenID Connect in
+  Amazon Web Services"
+  (https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services).
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterLabels:
+      GitHubClientIds:
+        default: GitHub Client IDs (Audiences)
+      GitHubOidcProviderUrl:
+        default: GitHub OIDC Provider URL
+      GitHubThumbprints:
+        default: GitHub OIDC Provider Thumbprints
+      TrustedRepositories:
+        default: Trusted GitHub Repositories/Branches/Environments
+
+    ParameterGroups:
+      - Label:
+          default: OpenID Connect (OIDC)
+        Parameters:
+          - GitHubOidcProviderUrl
+          - GitHubThumbprints
+          - GitHubClientIds
+      - Label:
+          default: Sample IAM Role
+        Parameters:
+          - TrustedRepositories
+
+
+Parameters:
+  GitHubClientIds:
+    Type: CommaDelimitedList
+    Default: sts.amazonaws.com
+    Description: >-
+      Specify a comma-separated list of client IDs, or audiences.  Use
+      `sts.amazonaws.com` if you are using the official action,
+      aws-actions/configure-aws-credentials
+      (https://github.com/aws-actions/configure-aws-credentials).
+      Note that you cannot register more than 100 client IDs with a
+      single OIDC provider.  AWS Identity and Access Management (IAM)
+      recommends that users evaluate the `aud` IAM condition key in
+      the trust policy of any role that trusts the GitHub OIDC
+      provider, limiting which GitHub actions are able to assume that
+      role.  This condition key may match mutiple client IDs.
+    AllowedPattern: |-
+      ^.{1,255}$
+    ConstraintDescription: >-
+      While there is no defined format for a client ID, this only
+      accepts client IDs up to 255 characters long.
+  GitHubOidcProviderUrl:
+    Type: String
+    Default: https://token.actions.githubusercontent.com
+    Description: >-
+      Enter the URL of the GitHub OpenID Connect (OIDC) provider.
+      Note that you cannot register the same provider multiple times
+      in a single AWS account.  If you try to submit a URL with a
+      hostname that has already been used for an OpenID Connect
+      provider in this AWS account, you will get an error.
+    AllowedPattern: |-
+      ^https://[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?:/[^?#]*)*$
+    MinLength: 1
+    MaxLength: 255
+    ConstraintDescription: >-
+      The GitHub OIDC provider URL must begin with `https://` and
+      should correspond to the `iss` claim in the provider's ID
+      tokens.  Per the OIDC standard, path components are allowed but
+      query parameters are not, so typically the URL consists of only
+      a hostname, like https://server.example.org or
+      https://example.com.  The URL should not contain a port number.
+      It has a minimum length of 1 and a maximum length of 255.
+  GitHubThumbprints:
+    Type: CommaDelimitedList
+    Default: 1b511abead59c6ce207077c0bf0e0043b1382612
+    Description: >-
+      Specify a comma-delimited list of server certificate thumbprints
+      for the GitHub OIDC provider.  Typically, this list includes
+      only one entry, but IAM lets you have up to five thumbprints for
+      an OIDC provider.  This lets you maintain multiple thumbprints
+      if the identity provider is rotating certificates.  For more
+      information about obtaining the OIDC provider thumbprint, see
+      "Obtaining the thumbprint for an OpenID Connect provider" in the
+      IAM User Guide
+      (https://docs.aws.amazon.com/IAM/latest/UserGuide/identity-providers-oidc-obtain-thumbprint.html).
+    AllowedPattern: |-
+      ^[0-9a-f]{40}$
+    ConstraintDescription: >-
+      You must provide at least one thumbprint when creating an IAM
+      OIDC provider.  It is always a 40-character string.
+  TrustedRepositories:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      Optionally, enter a comma-delimited list of repositories,
+      branches, and environments authorized to access this AWS account
+      with full administrator privileges.  Wildcards may be used.  For
+      example, the value `repo:octo-org/octo-repo:ref:refs/heads/main`
+      would allow workflows running in the octo-org/octo-repo's main
+      branch to assume the role.  For more information on creating IAM
+      roles and trusts, see "Configure AWS Credentials for GitHub
+      Actions"
+      (https://github.com/aws-actions/configure-aws-credentials#configure-aws-credentials-for-github-actions),
+      "Configuring a role for GitHub OIDC identity provider"
+      (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html#idp_oidc_Create_GitHub),
+      "About security hardening with OpenID Connect"
+      (https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#understanding-the-oidc-token),
+      and "Using environments for deployment"
+      (https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules).
+
+
+Conditions:
+  # https://stackoverflow.com/a/63163472
+  WithExampleRole:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - Fn::Join:
+              - ""
+              - Ref: TrustedRepositories
+
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      ClientIdList:
+        Ref: GitHubClientIds
+      ThumbprintList:
+        Ref: GitHubThumbprints
+      Url:
+        Ref: GitHubOidcProviderUrl
+
+  ExampleGitHubActionsRole:
+    Type: AWS::IAM::Role
+    Condition: WithExampleRole
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+                Ref: GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringLike:
+                token.actions.githubusercontent.com:aud:
+                  Ref: GitHubClientIds
+                token.actions.githubusercontent.com:sub:
+                  Ref: TrustedRepositories
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+
+Outputs:
+  ExampleGitHubActionsRole:
+    Condition: WithExampleRole
+    Description: >-
+      WARNING: This role grants full administrator access to the
+      GitHub repositories, branches, and environments listed in the
+      TrustedRepositories parameter.  Instead, a role should follow
+      the principle of least privilege.  Use CloudTrail to tailor
+      policies accordingly.
+    Value:
+      Fn::GetAtt: ExampleGitHubActionsRole.Arn
+
+  GitHubOidcProvider:
+    Description: >-
+      The Amazon Resource Name (ARN) of the GitHub OIDC provider, for
+      use in role trust policies.
+    Value:
+      Ref: GitHubOidcProvider
+
+  GitHubOidcProviderFqdn:
+    Description: >-
+      The fully qualified domain name of the GitHub OIDC provider, for
+      use in OIDC audience (aud) and subject (sub) constraints.
+    Value:
+      Fn::Select:
+        - 2
+        - Fn::Split:
+            - "/"
+            - Ref: GitHubOidcProviderUrl
