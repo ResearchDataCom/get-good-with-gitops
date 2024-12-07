@@ -1,6 +1,5 @@
-from pathlib import Path
-
 import boto3
+from pathlib import Path
 
 # Load the template located in the same directory as this file.
 template_html = (Path(__file__).parent / "template.html").read_text()
@@ -8,7 +7,6 @@ template_html = (Path(__file__).parent / "template.html").read_text()
 # Connect to DynamoDB.
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table("starter-scoreboard")
-
 
 def lambda_handler(event, context):
     # Display the scores in table format.
