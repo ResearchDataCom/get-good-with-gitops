@@ -4,11 +4,11 @@ from pathlib import Path
 # Load the template located in the same directory as this file.
 template_html = (Path(__file__).parent / "template.html").read_text()
 
-# Connect to DynamoDB.
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table("simple-scoreboard")
-
 def lambda_handler(event, context):
+    # Connect to DynamoDB.
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table("simple-scoreboard")
+
     # Display the scores in table format.
     scores = "\n".join(
         [
