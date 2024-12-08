@@ -33,6 +33,7 @@ dev = [
     "black",
     "checkov",
     "flake8-bugbear",
+    "flake8-pytest-style",
     "isort",
     "pre-commit",
 ]
