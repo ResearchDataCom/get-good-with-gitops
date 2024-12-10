@@ -1,0 +1,32 @@
+---
+name: Continuous Delivery
+
+# Trigger this workflow manually or by pushing commits to any branch.
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Build the deployment package.
+      - uses: actions/checkout@v4
+      - run: zip lambda-function.zip *.py *.html
+
+      # Initialize OpenTofu and deploy the stack.
+      - uses: opentofu/setup-opentofu@v1.0.2
+      - run: tofu init
+      - run: tofu validate -no-color
+      - id: plan
+        run: tofu plan -out terraform.tfplan -detailed-exitcode -no-color
+        env:
+          TF_VAR_STACK_NAME: simple-scoreboard
+          TF_VAR_TAGS_ALL: |
+            {"Environment": "Development", "Service": "Scorekeeping"}
+      - if: steps.plan.outputs.exitcode == 2
+        run: tofu apply -auto-approve -no-color terraform.tfplan

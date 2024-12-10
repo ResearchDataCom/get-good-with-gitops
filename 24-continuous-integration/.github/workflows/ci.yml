@@ -1,0 +1,40 @@
+---
+name: Continuous Integration
+
+# Trigger this workflow manually, by pushing commits to any branch, or
+# by filing a pull request.
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Get the latest code.
+      - uses: actions/checkout@v4
+
+      # Install the software used for linting and testing.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: opentofu/setup-opentofu@v1
+      - uses: terraform-linters/setup-tflint@v4
+      - run: pip install -e .[dev,test]
+
+      # Create a dummy Lambda function package for validation
+      # purposes.
+      - run: touch lambda-function.zip
+
+      # Run the linters.
+      - uses: pre-commit/action@v3.0.1
+
+      # Run the test suite.
+      - uses: pavelzw/pytest-action@v2
+        with:
+          custom-arguments: --cov=simple_scoreboard
