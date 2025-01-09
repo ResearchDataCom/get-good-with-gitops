@@ -1,0 +1,42 @@
+---
+name: Continuous Delivery
+
+# Trigger this workflow manually or by pushing commits to any branch.
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Build the deployment package.
+      - uses: actions/checkout@v4
+      - run: zip lambda-function.zip *.py *.html
+
+      # Log into AWS.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ secrets.IAM_ROLE_TO_ASSUME || null }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || null }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || null }}
+          mask-aws-account-id: true
+          role-skip-session-tagging: true
+
+      # Initialize OpenTofu and deploy the stack.
+      - uses: opentofu/setup-opentofu@v1.0.2
+      - run: tofu init
+      - run: tofu validate -no-color
+      - id: plan
+        run: tofu plan -out terraform.tfplan -detailed-exitcode -no-color
+        env:
+          TF_VAR_STACK_NAME: simple-scoreboard
+          TF_VAR_TAGS_ALL: |
+            {"Environment": "Development", "Service": "Scorekeeping"}
+      - if: steps.plan.outputs.exitcode == 2
+        run: tofu apply -auto-approve -no-color terraform.tfplan
